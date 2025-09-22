@@ -1,4 +1,5 @@
 python-telegram-bot>=20.0
 phonenumbers>=8.13.0
 python-dotenv>=1.0.0
-requests>=2.31.0  # For future API integration
+aiohttp>=3.8.0
+asyncio>=3.4.0
