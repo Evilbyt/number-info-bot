@@ -1,0 +1,279 @@
+{
+"name": "Daily Anime Shorts with VO and Telegram Notify",
+"active": true,
+"nodes": [
+{
+"parameters": {
+"cronExpression": "0 18 * * *",
+"options": {
+"timezone": "Your/Timezone"
+}
+},
+"id": "Schedule Trigger",
+"type": "n8n-nodes-base.cron",
+"typeVersion": 1,
+"position": [
+250,
+100
+],
+"name": "Schedule Trigger"
+},
+{
+"parameters": {
+"requestMethod": "GET",
+"url": "https://your-storage.example.com/api/daily-clips?date={{ $now.isoDate }}",
+"jsonParameters": true,
+"options": {
+"qs": {},
+"bodyContentType": "json"
+}
+},
+"id": "Clip Fetch",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+550,
+60
+],
+"name": "Clip Fetch",
+"credentials": null
+},
+{
+"parameters": {
+"requestMethod": "POST",
+"url": "https://api.your-ai-service/generate-script",
+"jsonParameters": true,
+"options": {},
+"bodyParametersJson": "={"asset_id":"{{$json["asset_id"]}}","theme":"adventure friendship","tone":"energetic American English","target_duration_sec":15,"max_words":22}"
+},
+"id": "Script Generator",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+800,
+60
+],
+"name": "Script Generator"
+},
+{
+"parameters": {
+"requestMethod": "POST",
+"url": "https://api.your-tts-service/generate",
+"jsonParameters": true,
+"options": {},
+"bodyParametersJson": "={"text":"{{$json["text"]}}","voice":"en-US-Wavenet-D","speaking_rate":1.0,"pitch":0.0,"output_format":"mp3","sample_rate_hertz":48000}"
+},
+"id": "TTS VO",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+1050,
+60
+],
+"name": "TTS VO"
+},
+{
+"parameters": {
+"operation": "merge",
+"bin": [
+{
+"item": {
+"binary": {
+"vo_mp3": {
+"fileName": "vo_{{$json["script_id"]}}.mp3",
+"dataPropertyName": "data",
+"mimeType": "audio/mpeg"
+}
+}
+}
+},
+{
+"item": {
+"json": {
+"clip_url": "{{$json["clip_url"]}}",
+"asset_id": "{{$json["asset_id"]}}",
+"run_id": "{{$json["run_id"]}}"
+}
+}
+}
+]
+},
+"id": "Prepare Assets",
+"type": "n8n-nodes-base.merge",
+"typeVersion": 1,
+"position": [
+1250,
+60
+],
+"name": "Prepare Assets"
+},
+{
+"parameters": {
+"operation": "execute",
+"code": "const fetch = require('node:stream');\n// Placeholder for a cloud-based video editor API call to assemble 15s with VO and VFX\nreturn [ {\n json: {\n "run_id": "{{$json["run_id"]}}",\n "final_video_path": "/videos/short_run_{{$json["run_id"]}}/final_video.mp4",\n "status": "assembled"\n }\n} ];"
+},
+"id": "Video Assemble",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [
+1500,
+60
+],
+"name": "Video Assemble"
+},
+{
+"parameters": {
+"requestMethod": "POST",
+"url": "https://your-encoding-service.example.com/encode",
+"jsonParameters": true,
+"options": {},
+"bodyParametersJson": "={"input_path":"{{$json["final_video_path"]}}","profile":"VEO3_1080x1920_15s","codec":"h264","bitrate":12000000,"audio":{"codec":"aac","bitrate":192000},"duration":15}"
+},
+"id": "Encode Veo3",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+1900,
+60
+],
+"name": "Encode Veo3"
+},
+{
+"parameters": {
+"requestMethod": "POST",
+"url": "https://content.googleapis.com/youtube/v3/videos?part=snippet,status",
+"jsonParameters": true,
+"options": {},
+"bodyParametersJson": "={"snippet":{"title":"Epic 15s Anime Short: Courage & Friendship #shorts","description":"A quick teaser inspired by anime vibes. Adventure awaits! Credit: Clip source. #shorts #anime","tags":["anime","shorts","veo3","adventure"]},"status":{"privacyStatus":"public"}}"
+},
+"id": "YouTube Upload",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+2300,
+60
+],
+"name": "YouTube Upload"
+},
+{
+"parameters": {
+"requestMethod": "POST",
+"url": "https://api.telegram.org/bot{{$json["TELEGRAM_BOT_TOKEN"]}}/sendMessage",
+"jsonParameters": true,
+"options": {},
+"bodyParametersJson": "={"chat_id":"{{$json["TELEGRAM_CHAT_ID"]}}","text":"New Shorts published: Epic 15s Anime Short: Courage & Friendship. Watch: https://youtube.com/shorts/{{$json["video_id"]}}"}"
+},
+"id": "Telegram Notify",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 1,
+"position": [
+2850,
+60
+],
+"name": "Telegram Notify"
+},
+{
+"parameters": {
+"operation": "append",
+"table": "logs",
+"fieldMappingJson": "{"run_id":"{{run_id}}","asset_id":"{{asset_id}}","script_id":"{{script_id}}","vo_status":"done","video_id":"{{video_id}}","upload_status":"uploaded","telegram_status":"delivered","timestamps":"{{timestamp}}"}"
+},
+"id": "Logging",
+"type": "n8n-nodes-base.databaseSave",
+"typeVersion": 1,
+"position": [
+3400,
+60
+],
+"name": "Logging"
+}
+],
+"connections": {
+"Schedule Trigger": {
+"main": [
+[
+"Clip Fetch",
+"start"
+]
+]
+},
+"Clip Fetch": {
+"main": [
+[
+"Script Generator",
+"preference"
+],
+[
+"Prepare Assets",
+"input"
+]
+]
+},
+"Script Generator": {
+"main": [
+[
+"TTS VO",
+"preference"
+]
+]
+},
+"TTS VO": {
+"main": [
+[
+"Prepare Assets",
+"input"
+]
+]
+},
+"Prepare Assets": {
+"main": [
+[
+"Video Assemble",
+"input"
+]
+]
+},
+"Video Assemble": {
+"main": [
+[
+"Encode Veo3",
+"input"
+]
+]
+},
+"Encode Veo3": {
+"main": [
+[
+"YouTube Upload",
+"input"
+]
+]
+},
+"YouTube Upload": {
+"main": [
+[
+"Telegram Notify",
+"input"
+]
+]
+},
+"Telegram Notify": {
+"main": [
+[
+"Logging",
+"input"
+]
+]
+},
+"Logging": {
+"main": [
+[
+"End",
+"input"
+]
+]
+}
+},
+"active": true,
+"settings": {}
+}
